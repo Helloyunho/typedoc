@@ -243,10 +243,23 @@ export class Application extends ChildableComponent<
             );
         }
 
+        // From: https://github.com/denoland/deno/blob/master/cli/tsc/99_main_compiler.js#L163
+        const SNAPSHOT_COMPILE_OPTIONS = {
+            esModuleInterop: true,
+            jsx: ts.JsxEmit.React,
+            module: ts.ModuleKind.ESNext,
+            noEmit: true,
+            strict: true,
+            target: ts.ScriptTarget.ESNext,
+        };
+
         const programs = [
             ts.createProgram({
                 rootNames: this.application.options.getFileNames(),
-                options: this.application.options.getCompilerOptions(),
+                options: {
+                    ...this.application.options.getCompilerOptions(),
+                    ...SNAPSHOT_COMPILE_OPTIONS,
+                },
                 projectReferences: this.application.options.getProjectReferences(),
             }),
         ];
@@ -263,7 +276,10 @@ export class Application extends ChildableComponent<
 
                 programs.push(
                     ts.createProgram({
-                        options: ref.commandLine.options,
+                        options: {
+                            ...ref.commandLine.options,
+                            ...SNAPSHOT_COMPILE_OPTIONS,
+                        },
                         rootNames: ref.commandLine.fileNames,
                         projectReferences: ref.commandLine.projectReferences,
                     })
