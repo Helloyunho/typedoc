@@ -35,6 +35,47 @@ const supportedVersionMajorMinor = packageInfo.peerDependencies.typescript
     .split("||")
     .map((version) => version.replace(/^\s*|\.x\s*$/g, ""));
 
+// From: https://github.com/denoland/deno/blob/master/cli/tsc/99_main_compiler.js#L125
+/** Diagnostics that are intentionally ignored when compiling TypeScript in
+ * Deno, as they provide misleading or incorrect information. */
+const IGNORED_DIAGNOSTICS = [
+    // TS1208: All files must be modules when the '--isolatedModules' flag is
+    // provided.  We can ignore because we guarantee that all files are
+    // modules.
+    1208,
+    // TS1375: 'await' expressions are only allowed at the top level of a file
+    // when that file is a module, but this file has no imports or exports.
+    // Consider adding an empty 'export {}' to make this file a module.
+    1375,
+    // TS1103: 'for-await-of' statement is only allowed within an async function
+    // or async generator.
+    1103,
+    // TS2306: File 'file:///Users/rld/src/deno/cli/tests/subdir/amd_like.js' is
+    // not a module.
+    2306,
+    // TS2691: An import path cannot end with a '.ts' extension. Consider
+    // importing 'bad-module' instead.
+    2691,
+    // TS2792: Cannot find module. Did you mean to set the 'moduleResolution'
+    // option to 'node', or to add aliases to the 'paths' option?
+    2792,
+    // TS5009: Cannot find the common subdirectory path for the input files.
+    5009,
+    // TS5055: Cannot write file
+    // 'http://localhost:4545/cli/tests/subdir/mt_application_x_javascript.j4.js'
+    // because it would overwrite input file.
+    5055,
+    // TypeScript is overly opinionated that only CommonJS modules kinds can
+    // support JSON imports.  Allegedly this was fixed in
+    // Microsoft/TypeScript#26825 but that doesn't seem to be working here,
+    // so we will ignore complaints about this compiler setting.
+    5070,
+    // TS7016: Could not find a declaration file for module '...'. '...'
+    // implicitly has an 'any' type.  This is due to `allowJs` being off by
+    // default but importing of a JavaScript module.
+    7016,
+];
+
 /**
  * The default TypeDoc main application class.
  *
@@ -232,7 +273,13 @@ export class Application extends ChildableComponent<
 
         this.logger.verbose(`Converting with ${programs.length} programs`);
 
-        const errors = flatMap(programs, ts.getPreEmitDiagnostics);
+        const emitFunc = (program: ts.Program) => {
+            const result = ts.getPreEmitDiagnostics(program);
+            return result.filter(
+                ({ code }) => !IGNORED_DIAGNOSTICS.includes(code)
+            );
+        };
+        const errors = flatMap(programs, emitFunc);
         if (errors.length) {
             this.logger.diagnostics(errors);
             return;
